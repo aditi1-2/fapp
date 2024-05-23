@@ -1,0 +1,30 @@
+# deploy.yml
+- hosts: localhost
+  tasks:
+    - name: Ensure Kubernetes pod is deleted if exists
+      command: kubectl delete pod pwpod --ignore-not-found=true
+      ignore_errors: yes
+
+    - name: Deploy the new pod
+      command: kubectl run pwpod --image=aditigoel12/spe:latest --port=8082
+
+    - name: Expose the pod as a service if not exists
+      command: kubectl expose pod pwpod --name=pwodsvc --port=8082
+      ignore_errors: yes
+
+    - name: Wait for the pod to be ready
+      command: kubectl wait --for=condition=ready pod/pwpod --timeout=120s
+
+    - name: Forward the port
+      command: kubectl port-forward service/pwodsvc 7080:8082
+      async: 5
+      poll: 0
+      register: port_forward
+
+    - name: Wait for port-forward to be established
+      async_status:
+        jid: "{{ port_forward.ansible_job_id }}"
+      register: port_forward_status
+      until: port_forward_status.finished
+      retries: 5
+      delay: 5
